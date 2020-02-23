@@ -1,6 +1,8 @@
 package com.techyourchance.multithreading.exercises.exercise3;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+
 public class Exercise3Fragment extends BaseFragment {
 
     private static final int SECONDS_TO_COUNT = 3;
@@ -24,6 +27,7 @@ public class Exercise3Fragment extends BaseFragment {
 
     private Button mBtnCountSeconds;
     private TextView mTxtCount;
+    private Handler uiHandler = new Handler(Looper.getMainLooper());
 
     @Nullable
     @Override
@@ -49,6 +53,30 @@ public class Exercise3Fragment extends BaseFragment {
     }
 
     private void countIterations() {
+        mBtnCountSeconds.setEnabled(false);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (int i = 0; i < SECONDS_TO_COUNT ; i++) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    final int currentCount = i + 1;
+                    uiHandler.post(new Runnable() {
+                        @Override public void run() {
+                            mTxtCount.setText("Count: " + currentCount);
+                        }
+                    });
+                }
+                uiHandler.post(new Runnable() {
+                    @Override public void run() {
+                        mTxtCount.setText("Done");
+                        mBtnCountSeconds.setEnabled(true);
+                    }
+                });
+            }
+        }).start();
         /*
         1. Disable button to prevent multiple clicks
         2. Start counting on background thread using loop and Thread.sleep()
