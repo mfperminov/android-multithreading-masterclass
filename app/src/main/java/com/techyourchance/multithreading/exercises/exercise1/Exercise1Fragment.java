@@ -30,6 +30,23 @@ public class Exercise1Fragment extends BaseFragment {
 
     private Button mBtnCountIterations;
 
+    private Runnable iterationRunnable = new Runnable() {
+        @Override public void run() {
+            long startTimestamp = System.currentTimeMillis();
+            long endTimestamp = startTimestamp + ITERATIONS_COUNTER_DURATION_SEC * 1000;
+
+            int iterationsCount = 0;
+            while (System.currentTimeMillis() <= endTimestamp) {
+                iterationsCount++;
+            }
+
+            Log.d(
+                "Exercise1",
+                "iterations in " + ITERATIONS_COUNTER_DURATION_SEC + "seconds: " + iterationsCount
+            );
+        }
+    };
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -39,7 +56,7 @@ public class Exercise1Fragment extends BaseFragment {
         mBtnCountIterations.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                countIterations();
+                new Thread(iterationRunnable).start();
             }
         });
 
@@ -51,18 +68,4 @@ public class Exercise1Fragment extends BaseFragment {
         return "Exercise 1";
     }
 
-    private void countIterations() {
-        long startTimestamp = System.currentTimeMillis();
-        long endTimestamp = startTimestamp + ITERATIONS_COUNTER_DURATION_SEC * 1000;
-
-        int iterationsCount = 0;
-        while (System.currentTimeMillis() <= endTimestamp) {
-            iterationsCount++;
-        }
-
-        Log.d(
-                "Exercise1",
-                "iterations in " + ITERATIONS_COUNTER_DURATION_SEC + "seconds: " + iterationsCount
-        );
-    }
 }
