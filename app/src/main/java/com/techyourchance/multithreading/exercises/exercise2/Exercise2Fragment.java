@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Exercise2Fragment extends BaseFragment {
 
@@ -22,6 +23,8 @@ public class Exercise2Fragment extends BaseFragment {
     }
 
     private byte[] mDummyData;
+
+    private AtomicBoolean isScreenStopped = new AtomicBoolean(false);
 
     @Nullable
     @Override
@@ -39,6 +42,7 @@ public class Exercise2Fragment extends BaseFragment {
     @Override
     public void onStop() {
         super.onStop();
+        isScreenStopped.set(true);
     }
 
     @Override
@@ -55,6 +59,9 @@ public class Exercise2Fragment extends BaseFragment {
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
+                        return;
+                    }
+                    if(isScreenStopped.get()) {
                         return;
                     }
                     screenTimeSeconds++;
