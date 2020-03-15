@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 import androidx.fragment.app.Fragment;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Exercise4Fragment extends BaseFragment {
 
@@ -41,7 +42,7 @@ public class Exercise4Fragment extends BaseFragment {
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
     private BigInteger[] mThreadsComputationResults;
-    private int mNumOfFinishedThreads;
+    private AtomicInteger mNumOfFinishedThreads;
 
     private long mComputationTimeoutTime;
 
@@ -121,7 +122,7 @@ public class Exercise4Fragment extends BaseFragment {
         mNumberOfThreads = factorialArgument < 20
                 ? 1 : Runtime.getRuntime().availableProcessors();
 
-        mNumOfFinishedThreads = 0;
+        mNumOfFinishedThreads.set(0);
 
         mAbortComputation = false;
 
@@ -169,7 +170,7 @@ public class Exercise4Fragment extends BaseFragment {
                         product = product.multiply(new BigInteger(String.valueOf(num)));
                     }
                     mThreadsComputationResults[threadIndex] = product;
-                    mNumOfFinishedThreads++;
+                    mNumOfFinishedThreads.getAndIncrement();
                 }
             }).start();
 
@@ -179,7 +180,7 @@ public class Exercise4Fragment extends BaseFragment {
     @WorkerThread
     private void waitForThreadsResultsOrTimeoutOrAbort() {
         while (true) {
-            if (mNumOfFinishedThreads == mNumberOfThreads) {
+            if (mNumOfFinishedThreads.get() == mNumberOfThreads) {
                 break;
             } else if(mAbortComputation) {
                 break;
