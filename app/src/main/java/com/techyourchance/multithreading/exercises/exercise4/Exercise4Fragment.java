@@ -122,7 +122,7 @@ public class Exercise4Fragment extends BaseFragment {
         mNumberOfThreads = factorialArgument < 20
                 ? 1 : Runtime.getRuntime().availableProcessors();
 
-        mNumOfFinishedThreads.set(0);
+        mNumOfFinishedThreads = new AtomicInteger(0);
 
         mAbortComputation = false;
 
