@@ -41,7 +41,7 @@ public class Exercise4Fragment extends BaseFragment {
 
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
-    private BigInteger[] mThreadsComputationResults;
+    private  volatile BigInteger[] mThreadsComputationResults;
     private AtomicInteger mNumOfFinishedThreads;
 
     private long mComputationTimeoutTime;
