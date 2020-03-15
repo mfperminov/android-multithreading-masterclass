@@ -23,6 +23,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
 import androidx.fragment.app.Fragment;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class Exercise4Fragment extends BaseFragment {
 
@@ -41,7 +42,7 @@ public class Exercise4Fragment extends BaseFragment {
 
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
-    private  volatile BigInteger[] mThreadsComputationResults;
+    private AtomicReferenceArray<BigInteger> mThreadsComputationResults;
     private AtomicInteger mNumOfFinishedThreads;
 
     private long mComputationTimeoutTime;
@@ -126,7 +127,7 @@ public class Exercise4Fragment extends BaseFragment {
 
         mAbortComputation = false;
 
-        mThreadsComputationResults = new BigInteger[mNumberOfThreads];
+        mThreadsComputationResults = new AtomicReferenceArray<>(mNumberOfThreads);
 
         mThreadsComputationRanges = new ComputationRange[mNumberOfThreads];
 
@@ -169,7 +170,7 @@ public class Exercise4Fragment extends BaseFragment {
                         }
                         product = product.multiply(new BigInteger(String.valueOf(num)));
                     }
-                    mThreadsComputationResults[threadIndex] = product;
+                    mThreadsComputationResults.set(threadIndex, product);
                     mNumOfFinishedThreads.getAndIncrement();
                 }
             }).start();
@@ -232,7 +233,7 @@ public class Exercise4Fragment extends BaseFragment {
             if (isTimedOut()) {
                 break;
             }
-            result = result.multiply(mThreadsComputationResults[i]);
+            result = result.multiply(mThreadsComputationResults.get(i));
         }
         return result;
     }
