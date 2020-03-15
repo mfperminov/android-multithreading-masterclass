@@ -30,9 +30,9 @@ public class Exercise4Fragment extends BaseFragment {
         return new Exercise4Fragment();
     }
 
-    private static int MAX_TIMEOUT_MS = DefaultConfiguration.DEFAULT_FACTORIAL_TIMEOUT_MS;
+    private static final int MAX_TIMEOUT_MS = DefaultConfiguration.DEFAULT_FACTORIAL_TIMEOUT_MS;
 
-    private Handler mUiHandler = new Handler(Looper.getMainLooper());
+    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
 
     private EditText mEdtArgument;
     private EditText mEdtTimeout;
