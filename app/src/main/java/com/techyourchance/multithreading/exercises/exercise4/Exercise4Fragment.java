@@ -45,7 +45,7 @@ public class Exercise4Fragment extends BaseFragment {
 
     private long mComputationTimeoutTime;
 
-    private boolean mAbortComputation;
+    private volatile boolean mAbortComputation;
 
     @Nullable
     @Override
