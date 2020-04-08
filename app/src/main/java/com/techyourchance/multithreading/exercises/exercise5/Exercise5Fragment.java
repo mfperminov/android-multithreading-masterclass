@@ -3,54 +3,46 @@ package com.techyourchance.multithreading.exercises.exercise5;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-
-import com.techyourchance.multithreading.DefaultConfiguration;
-import com.techyourchance.multithreading.R;
-import com.techyourchance.multithreading.common.BaseFragment;
-
-import java.util.LinkedList;
-import java.util.Queue;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import com.techyourchance.multithreading.DefaultConfiguration;
+import com.techyourchance.multithreading.R;
+import com.techyourchance.multithreading.common.BaseFragment;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Exercise5Fragment extends BaseFragment {
+
+    private static final int NUM_OF_MESSAGES = DefaultConfiguration.DEFAULT_NUM_OF_MESSAGES;
+    private static final int BLOCKING_QUEUE_CAPACITY =
+        DefaultConfiguration.DEFAULT_BLOCKING_QUEUE_SIZE;
+    private final Object LOCK = new Object();
+    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
+    private final MyBlockingQueue mBlockingQueue = new MyBlockingQueue(BLOCKING_QUEUE_CAPACITY);
+    private Button mBtnStart;
+    private ProgressBar mProgressBar;
+    private TextView mTxtReceivedMessagesCount;
+    private TextView mTxtExecutionTime;
+    private int mNumOfFinishedConsumers;
+    private int mNumOfReceivedMessages;
+    private long mStartTimestamp;
 
     public static Fragment newInstance() {
         return new Exercise5Fragment();
     }
 
-    private static final int NUM_OF_MESSAGES = DefaultConfiguration.DEFAULT_NUM_OF_MESSAGES;
-    private static final int BLOCKING_QUEUE_CAPACITY = DefaultConfiguration.DEFAULT_BLOCKING_QUEUE_SIZE;
-
-    private final Object LOCK = new Object();
-
-    private Button mBtnStart;
-    private ProgressBar mProgressBar;
-    private TextView mTxtReceivedMessagesCount;
-    private TextView mTxtExecutionTime;
-
-    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
-
-    private final MyBlockingQueue mBlockingQueue = new MyBlockingQueue(BLOCKING_QUEUE_CAPACITY);
-
-    private int mNumOfFinishedConsumers;
-
-    private int mNumOfReceivedMessages;
-
-    private long mStartTimestamp;
-
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+        @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_exercise_5, container, false);
 
         mBtnStart = view.findViewById(R.id.btn_start);
@@ -160,7 +152,8 @@ public class Exercise5Fragment extends BaseFragment {
                 mProgressBar.setVisibility(View.INVISIBLE);
                 mBtnStart.setEnabled(true);
                 synchronized (LOCK) {
-                    mTxtReceivedMessagesCount.setText("Received messages: " + mNumOfReceivedMessages);
+                    mTxtReceivedMessagesCount.setText(
+                        "Received messages: " + mNumOfReceivedMessages);
                 }
                 long executionTimeMs = System.currentTimeMillis() - mStartTimestamp;
                 mTxtExecutionTime.setText("Execution time: " + executionTimeMs + "ms");
@@ -175,8 +168,10 @@ public class Exercise5Fragment extends BaseFragment {
 
         private final int mCapacity;
         private final Queue<Integer> mQueue = new LinkedList<>();
+        private final Object INSERT_LOCK = new Object();
+        private final Object RETRIEVE_LOCK = new Object();
 
-        private int mCurrentSize = 0;
+        private AtomicInteger mCurrentSize = new AtomicInteger(0);
 
         private MyBlockingQueue(int capacity) {
             mCapacity = capacity;
@@ -189,9 +184,19 @@ public class Exercise5Fragment extends BaseFragment {
          * @param number the element to add
          */
         public void put(int number) {
-            if (mCurrentSize < mCapacity) {
+            synchronized (INSERT_LOCK) {
+                while (mCurrentSize.get() >= mCapacity) {
+                    try {
+                        INSERT_LOCK.wait();
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
+            synchronized (RETRIEVE_LOCK) {
                 mQueue.offer(number);
-                mCurrentSize++;
+                mCurrentSize.getAndIncrement();
+                RETRIEVE_LOCK.notifyAll();
             }
         }
 
@@ -202,14 +207,24 @@ public class Exercise5Fragment extends BaseFragment {
          * @return the head of this queue
          */
         public int take() {
-            if (mCurrentSize > 0) {
-                mCurrentSize--;
+            synchronized (RETRIEVE_LOCK) {
+                while (mCurrentSize.get() <= 0) {
+                    try {
+                        RETRIEVE_LOCK.wait();
+                    } catch (InterruptedException e) {
+                        return -1;
+                    }
+                }
+            }
+
+            synchronized (INSERT_LOCK) {
+                mCurrentSize.getAndDecrement();
                 Integer message = mQueue.poll();
                 if (message != null) {
                     return message;
                 }
+                INSERT_LOCK.notifyAll();
             }
-
             return -1;
         }
     }
