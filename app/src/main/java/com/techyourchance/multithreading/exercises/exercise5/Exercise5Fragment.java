@@ -16,6 +16,7 @@ import com.techyourchance.multithreading.DefaultConfiguration;
 import com.techyourchance.multithreading.R;
 import com.techyourchance.multithreading.common.BaseFragment;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -168,8 +169,7 @@ public class Exercise5Fragment extends BaseFragment {
 
         private final int mCapacity;
         private final Queue<Integer> mQueue = new LinkedList<>();
-        private final Object INSERT_LOCK = new Object();
-        private final Object RETRIEVE_LOCK = new Object();
+        private final Object QUEUE_LOCK = new Object();
 
         private AtomicInteger mCurrentSize = new AtomicInteger(0);
 
@@ -184,19 +184,17 @@ public class Exercise5Fragment extends BaseFragment {
          * @param number the element to add
          */
         public void put(int number) {
-            synchronized (INSERT_LOCK) {
+            synchronized (QUEUE_LOCK) {
                 while (mCurrentSize.get() >= mCapacity) {
                     try {
-                        INSERT_LOCK.wait();
+                        QUEUE_LOCK.wait();
                     } catch (InterruptedException e) {
                         return;
                     }
                 }
-            }
-            synchronized (RETRIEVE_LOCK) {
                 mQueue.offer(number);
                 mCurrentSize.getAndIncrement();
-                RETRIEVE_LOCK.notifyAll();
+                QUEUE_LOCK.notifyAll();
             }
         }
 
@@ -207,25 +205,18 @@ public class Exercise5Fragment extends BaseFragment {
          * @return the head of this queue
          */
         public int take() {
-            synchronized (RETRIEVE_LOCK) {
+            synchronized (QUEUE_LOCK) {
                 while (mCurrentSize.get() <= 0) {
                     try {
-                        RETRIEVE_LOCK.wait();
+                        QUEUE_LOCK.wait();
                     } catch (InterruptedException e) {
                         return -1;
                     }
                 }
-            }
-
-            synchronized (INSERT_LOCK) {
                 mCurrentSize.getAndDecrement();
-                Integer message = mQueue.poll();
-                if (message != null) {
-                    return message;
-                }
-                INSERT_LOCK.notifyAll();
+                QUEUE_LOCK.notifyAll();
+                return Objects.requireNonNull(mQueue.poll());
             }
-            return -1;
         }
     }
 }
