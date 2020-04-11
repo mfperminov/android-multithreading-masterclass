@@ -9,16 +9,13 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-
-import com.techyourchance.multithreading.DefaultConfiguration;
-import com.techyourchance.multithreading.R;
-import com.techyourchance.multithreading.common.BaseFragment;
-
-import java.math.BigInteger;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import com.techyourchance.multithreading.DefaultConfiguration;
+import com.techyourchance.multithreading.R;
+import com.techyourchance.multithreading.common.BaseFragment;
+import java.math.BigInteger;
 
 public class Exercise7Fragment extends BaseFragment implements ComputeFactorialUseCase.Listener {
 
@@ -38,7 +35,8 @@ public class Exercise7Fragment extends BaseFragment implements ComputeFactorialU
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mComputeFactorialUseCase = new ComputeFactorialUseCase();
+        mComputeFactorialUseCase = new ComputeFactorialUseCase(getCompositionRoot().getUiHandler(),
+            getCompositionRoot().getThreadPool());
     }
 
     @Nullable
