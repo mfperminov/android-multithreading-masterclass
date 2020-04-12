@@ -2,19 +2,14 @@ package com.techyourchance.multithreading.common.dependencyinjection;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.util.Log;
-
+import androidx.fragment.app.FragmentActivity;
 import com.techyourchance.fragmenthelper.FragmentContainerWrapper;
 import com.techyourchance.fragmenthelper.FragmentHelper;
-import com.techyourchance.multithreading.common.ToolbarManipulator;
 import com.techyourchance.multithreading.common.ScreensNavigator;
-
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadFactory;
+import com.techyourchance.multithreading.common.ToolbarManipulator;
+import com.techyourchance.threadposter.BackgroundThreadPoster;
+import com.techyourchance.threadposter.UiThreadPoster;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
-import androidx.fragment.app.FragmentActivity;
 
 public class PresentationCompositionRoot {
 
@@ -48,5 +43,13 @@ public class PresentationCompositionRoot {
 
     public ThreadPoolExecutor getThreadPool() {
         return mApplicationCompositionRoot.getThreadPool();
+    }
+
+    public UiThreadPoster getUiThreadPoster() {
+        return mApplicationCompositionRoot.getUiThreadPoster();
+    }
+
+    public BackgroundThreadPoster getBackgroundThreadPoster() {
+        return mApplicationCompositionRoot.getBackgroundThreadPoster();
     }
 }
