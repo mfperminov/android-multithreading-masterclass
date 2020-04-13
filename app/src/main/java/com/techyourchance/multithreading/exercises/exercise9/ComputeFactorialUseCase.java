@@ -2,20 +2,14 @@ package com.techyourchance.multithreading.exercises.exercise9;
 
 import android.os.Handler;
 import android.os.Looper;
-
-import com.techyourchance.multithreading.common.BaseObservable;
-
-import java.math.BigInteger;
-
+import android.util.Log;
+import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
+import io.reactivex.Observable;
+import java.math.BigInteger;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
-public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseCase.Listener> {
-
-    public interface Listener {
-        void onFactorialComputed(BigInteger result);
-        void onFactorialComputationTimedOut();
-        void onFactorialComputationAborted();
-    }
+public class ComputeFactorialUseCase {
 
     private final Object LOCK = new Object();
 
@@ -23,41 +17,32 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
 
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
-    private volatile BigInteger[] mThreadsComputationResults;
+    private AtomicReferenceArray<BigInteger> mThreadsComputationResults;
     private int mNumOfFinishedThreads = 0;
 
     private long mComputationTimeoutTime;
 
     private boolean mAbortComputation;
 
-    @Override
-    protected void onLastListenerUnregistered() {
-        super.onLastListenerUnregistered();
-        synchronized (LOCK) {
-            mAbortComputation = true;
-            LOCK.notifyAll();
-        }
-    }
-
-    public void computeFactorialAndNotify(final int argument, final int timeout) {
-        new Thread(() -> {
+    public Observable<Result> computeFactorial(final int argument, final int timeout) {
+        return Observable.fromCallable(() -> {
             initComputationParams(argument, timeout);
             startComputation();
             waitForThreadsResultsOrTimeoutOrAbort();
-            processComputationResults();
-        }).start();
+            return processComputationResults();
+        });
     }
 
     private void initComputationParams(int factorialArgument, int timeout) {
         mNumberOfThreads = factorialArgument < 20
-                ? 1 : Runtime.getRuntime().availableProcessors();
+            ? 1 : Runtime.getRuntime().availableProcessors();
 
         synchronized (LOCK) {
             mNumOfFinishedThreads = 0;
             mAbortComputation = false;
         }
 
-        mThreadsComputationResults = new BigInteger[mNumberOfThreads];
+        mThreadsComputationResults = new AtomicReferenceArray<>(mNumberOfThreads);
 
         mThreadsComputationRanges = new ComputationRange[mNumberOfThreads];
 
@@ -72,8 +57,8 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
         long nextComputationRangeEnd = factorialArgument;
         for (int i = mNumberOfThreads - 1; i >= 0; i--) {
             mThreadsComputationRanges[i] = new ComputationRange(
-                    nextComputationRangeEnd - computationRangeSize + 1,
-                    nextComputationRangeEnd
+                nextComputationRangeEnd - computationRangeSize + 1,
+                nextComputationRangeEnd
             );
             nextComputationRangeEnd = mThreadsComputationRanges[i].start - 1;
         }
@@ -98,13 +83,12 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
                     }
                     product = product.multiply(new BigInteger(String.valueOf(num)));
                 }
-                mThreadsComputationResults[threadIndex] = product;
+                mThreadsComputationResults.set(threadIndex, product);
 
                 synchronized (LOCK) {
                     mNumOfFinishedThreads++;
                     LOCK.notifyAll();
                 }
-
             }).start();
         }
     }
@@ -112,7 +96,9 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
     @WorkerThread
     private void waitForThreadsResultsOrTimeoutOrAbort() {
         synchronized (LOCK) {
-            while (mNumOfFinishedThreads != mNumberOfThreads && !mAbortComputation && !isTimedOut()) {
+            while (mNumOfFinishedThreads != mNumberOfThreads
+                && !mAbortComputation
+                && !isTimedOut()) {
                 try {
                     LOCK.wait(getRemainingMillisToTimeout());
                 } catch (InterruptedException e) {
@@ -123,21 +109,19 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
     }
 
     @WorkerThread
-    private void processComputationResults() {
+    private Result processComputationResults() {
         if (mAbortComputation) {
-            notifyAborted();
-            return;
+            return new Result(null, "Computation aborted");
         }
 
         BigInteger result = computeFinalResult();
 
         // need to check for timeout after computation of the final result
         if (isTimedOut()) {
-            notifyTimeout();
-            return;
+            return new Result(null, "Computation timed out");
         }
 
-        notifySuccess(result);
+        return new Result(result, null);
     }
 
     @WorkerThread
@@ -147,7 +131,11 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
             if (isTimedOut()) {
                 break;
             }
-            result = result.multiply(mThreadsComputationResults[i]);
+            try {
+                result = result.multiply(mThreadsComputationResults.get(i));
+            } catch (Exception e) {
+                Log.e("Rx", e.getMessage());
+            }
         }
         return result;
     }
@@ -160,30 +148,15 @@ public class ComputeFactorialUseCase extends BaseObservable<ComputeFactorialUseC
         return System.currentTimeMillis() >= mComputationTimeoutTime;
     }
 
-    private void notifySuccess(final BigInteger result) {
-        mUiHandler.post(() -> {
-            for (Listener listener : getListeners()) {
-                listener.onFactorialComputed(result);
-            }
-        });
-    }
+    static class Result {
+        @Nullable final BigInteger factorial;
+        @Nullable final String errorMessage;
 
-    private void notifyAborted() {
-        mUiHandler.post(() -> {
-            for (Listener listener : getListeners()) {
-                listener.onFactorialComputationAborted();
-            }
-        });
+        Result(@Nullable BigInteger factorial, @Nullable String errorMessage) {
+            this.factorial = factorial;
+            this.errorMessage = errorMessage;
+        }
     }
-
-    private void notifyTimeout() {
-        mUiHandler.post(() -> {
-            for (Listener listener : getListeners()) {
-                listener.onFactorialComputationTimedOut();
-            }
-        });
-    }
-
 
     private static class ComputationRange {
         private long start;

@@ -2,6 +2,7 @@ package com.techyourchance.multithreading.exercises.exercise9;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -9,31 +10,29 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
-
-import com.techyourchance.multithreading.DefaultConfiguration;
-import com.techyourchance.multithreading.R;
-import com.techyourchance.multithreading.common.BaseFragment;
-
-import java.math.BigInteger;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import com.techyourchance.multithreading.DefaultConfiguration;
+import com.techyourchance.multithreading.R;
+import com.techyourchance.multithreading.common.BaseFragment;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.schedulers.Schedulers;
 
-public class Exercise9Fragment extends BaseFragment implements ComputeFactorialUseCase.Listener {
-
-    public static Fragment newInstance() {
-        return new Exercise9Fragment();
-    }
+public class Exercise9Fragment extends BaseFragment {
 
     private static int MAX_TIMEOUT_MS = DefaultConfiguration.DEFAULT_FACTORIAL_TIMEOUT_MS;
-
     private EditText mEdtArgument;
     private EditText mEdtTimeout;
     private Button mBtnStartWork;
     private TextView mTxtResult;
-
     private ComputeFactorialUseCase mComputeFactorialUseCase;
+    private Disposable disposable;
+
+    public static Fragment newInstance() {
+        return new Exercise9Fragment();
+    }
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -43,7 +42,8 @@ public class Exercise9Fragment extends BaseFragment implements ComputeFactorialU
 
     @Nullable
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+        @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_exercise_9, container, false);
 
         mEdtArgument = view.findViewById(R.id.edt_argument);
@@ -59,30 +59,36 @@ public class Exercise9Fragment extends BaseFragment implements ComputeFactorialU
             mTxtResult.setText("");
             mBtnStartWork.setEnabled(false);
 
-
             InputMethodManager imm =
-                    (InputMethodManager) requireContext().getSystemService(Activity.INPUT_METHOD_SERVICE);
+                (InputMethodManager) requireContext().getSystemService(
+                    Activity.INPUT_METHOD_SERVICE);
             imm.hideSoftInputFromWindow(mBtnStartWork.getWindowToken(), 0);
 
             int argument = Integer.valueOf(mEdtArgument.getText().toString());
 
-            mComputeFactorialUseCase.computeFactorialAndNotify(argument, getTimeout());
+            disposable =
+                mComputeFactorialUseCase.computeFactorial(argument, getTimeout()).subscribeOn(
+                    Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe(result -> {
+                        if (result.factorial != null) {
+                            mTxtResult.setText(result.factorial.toString());
+                        } else {
+                            mTxtResult.setText(result.errorMessage);
+                        }
+                        mBtnStartWork.setEnabled(true);
+                    }, throwable -> Log.e("Exercise9", throwable.getMessage()));
         });
 
         return view;
     }
 
     @Override
-    public void onStart() {
-        super.onStart();
-        mComputeFactorialUseCase.registerListener(this);
-    }
-
-    @Override
     public void onStop() {
         super.onStop();
-        mComputeFactorialUseCase.unregisterListener(this);
-
+        if (disposable != null) {
+            disposable.dispose();
+        }
     }
 
     @Override
@@ -101,23 +107,5 @@ public class Exercise9Fragment extends BaseFragment implements ComputeFactorialU
             }
         }
         return timeout;
-    }
-
-    @Override
-    public void onFactorialComputed(BigInteger result) {
-        mTxtResult.setText(result.toString());
-        mBtnStartWork.setEnabled(true);
-    }
-
-    @Override
-    public void onFactorialComputationTimedOut() {
-        mTxtResult.setText("Computation timed out");
-        mBtnStartWork.setEnabled(true);
-    }
-
-    @Override
-    public void onFactorialComputationAborted() {
-        mTxtResult.setText("Computation aborted");
-        mBtnStartWork.setEnabled(true);
     }
 }
