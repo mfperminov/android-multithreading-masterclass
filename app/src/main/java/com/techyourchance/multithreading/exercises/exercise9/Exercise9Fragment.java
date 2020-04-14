@@ -77,7 +77,11 @@ public class Exercise9Fragment extends BaseFragment {
                             mTxtResult.setText(result.errorMessage);
                         }
                         mBtnStartWork.setEnabled(true);
-                    }, throwable -> Log.e("Exercise9", throwable.getMessage()));
+                    }, throwable -> {
+                        Log.e("Exercise9", throwable.getMessage());
+                        mTxtResult.setText(throwable.getMessage());
+                        mBtnStartWork.setEnabled(true);
+                    });
         });
 
         return view;

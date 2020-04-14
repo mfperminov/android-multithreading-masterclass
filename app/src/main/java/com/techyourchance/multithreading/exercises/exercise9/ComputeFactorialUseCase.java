@@ -1,20 +1,17 @@
 package com.techyourchance.multithreading.exercises.exercise9;
 
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
+import io.reactivex.schedulers.Schedulers;
 import java.math.BigInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class ComputeFactorialUseCase {
 
     private final Object LOCK = new Object();
-
-    private final Handler mUiHandler = new Handler(Looper.getMainLooper());
-
     private int mNumberOfThreads;
     private ComputationRange[] mThreadsComputationRanges;
     private AtomicReferenceArray<BigInteger> mThreadsComputationResults;
@@ -24,13 +21,31 @@ public class ComputeFactorialUseCase {
 
     private boolean mAbortComputation;
 
-    public Observable<Result> computeFactorial(final int argument, final int timeout) {
-        return Observable.fromCallable(() -> {
-            initComputationParams(argument, timeout);
-            startComputation();
-            waitForThreadsResultsOrTimeoutOrAbort();
-            return processComputationResults();
-        });
+    public Observable<FactorialResult> computeFactorial(final int argument, final int timeout) {
+        initComputationParams(argument, timeout);
+        return Flowable.range(0, mNumberOfThreads)
+            .flatMap(threadIndex -> Flowable
+                .fromCallable(() -> {
+                    long rangeStart = mThreadsComputationRanges[threadIndex].start;
+                    long rangeEnd = mThreadsComputationRanges[threadIndex].end;
+                    BigInteger product = new BigInteger("1");
+                    for (long num = rangeStart; num <= rangeEnd; num++) {
+                        if (isTimedOut()) {
+                            throw new TimeoutException();
+                        }
+                        product = product.multiply(new BigInteger(String.valueOf(num)));
+                    }
+                    return product;
+                }))
+                .subscribeOn(Schedulers.io())
+                .parallel(mNumberOfThreads)
+                .runOn(Schedulers.io())
+                .sequential()
+                .scan(BigInteger::multiply)
+                .takeLast(1)
+                .map(bigInteger -> new FactorialResult(bigInteger, null)
+                )
+                .toObservable();
     }
 
     private void initComputationParams(int factorialArgument, int timeout) {
@@ -109,19 +124,19 @@ public class ComputeFactorialUseCase {
     }
 
     @WorkerThread
-    private Result processComputationResults() {
+    private FactorialResult processComputationResults() {
         if (mAbortComputation) {
-            return new Result(null, "Computation aborted");
+            return new FactorialResult(null, "Computation aborted");
         }
 
         BigInteger result = computeFinalResult();
 
         // need to check for timeout after computation of the final result
         if (isTimedOut()) {
-            return new Result(null, "Computation timed out");
+            return new FactorialResult(null, "Computation timed out");
         }
 
-        return new Result(result, null);
+        return new FactorialResult(result, null);
     }
 
     @WorkerThread
@@ -148,11 +163,11 @@ public class ComputeFactorialUseCase {
         return System.currentTimeMillis() >= mComputationTimeoutTime;
     }
 
-    static class Result {
+    static class FactorialResult {
         @Nullable final BigInteger factorial;
         @Nullable final String errorMessage;
 
-        Result(@Nullable BigInteger factorial, @Nullable String errorMessage) {
+        FactorialResult(@Nullable BigInteger factorial, @Nullable String errorMessage) {
             this.factorial = factorial;
             this.errorMessage = errorMessage;
         }
@@ -165,6 +180,12 @@ public class ComputeFactorialUseCase {
         public ComputationRange(long start, long end) {
             this.start = start;
             this.end = end;
+        }
+    }
+
+    private static class TimeoutException extends Exception {
+        @Override public String getMessage() {
+            return "Computation timed out";
         }
     }
 }
