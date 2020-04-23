@@ -1,166 +1,121 @@
 package com.techyourchance.multithreading.exercises.exercise10
 
 import androidx.annotation.WorkerThread
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.math.BigInteger
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 
 class ComputeFactorialUseCase {
-
-    private val reentrantLock = ReentrantLock()
-    private val lockCondition = reentrantLock.newCondition()
-
-    private var numberOfThreads: Int = 0
-    private var threadsComputationRanges: Array<ComputationRange?> = arrayOf()
-    @Volatile private var threadsComputationResults: Array<BigInteger?> = arrayOf()
-    private var numOfFinishedThreads = 0
-
     private var computationTimeoutTime: Long = 0
-
-    private var abortComputation: Boolean = false
 
     suspend fun computeFactorial(
         argument: Int,
         timeout: Int
     ): Result {
-
-        initComputationParams(argument, timeout)
-        startComputation()
-        waitForThreadsResultsOrTimeoutOrAbort()
-        return processComputationResults()
-
-    }
-
-    private fun initComputationParams(
-        factorialArgument: Int,
-        timeout: Int
-    ) {
-        numberOfThreads = if (factorialArgument < 20)
-            1
-        else
-            Runtime.getRuntime().availableProcessors()
-
-        synchronized(reentrantLock) {
-            numOfFinishedThreads = 0
-            abortComputation = false
+        return withContext(Dispatchers.IO) {
+            try {
+                withTimeout(timeMillis = timeout.toLong()) {
+                    val ranges = getComputationRanges(argument)
+                    val partialResults = startComputation(ranges)
+                    processComputationResults(partialResults)
+                }
+            } catch (e: TimeoutCancellationException) {
+                Result.Timeout
+            }
         }
-
-        threadsComputationResults = arrayOfNulls(numberOfThreads)
-
-        threadsComputationRanges = arrayOfNulls(numberOfThreads)
-
-        initThreadsComputationRanges(factorialArgument)
-
-        computationTimeoutTime = System.currentTimeMillis() + timeout
     }
 
-    private fun initThreadsComputationRanges(factorialArgument: Int) {
-        val computationRangeSize = factorialArgument / numberOfThreads
+    private fun getComputationRanges(argument: Int): List<ComputationRange> {
+        val numberOfThreads = if (argument < 20) {
+            1
+        } else {
+            Runtime.getRuntime()
+                .availableProcessors()
+        }
+        val computationRangeSize = argument / numberOfThreads
 
-        var nextComputationRangeEnd = factorialArgument.toLong()
+        var nextComputationRangeEnd = argument.toLong()
+        val threadsComputationRanges = ArrayList<ComputationRange>(numberOfThreads).apply {
+            for (i in 0 until numberOfThreads) {
+                this.add(ComputationRange(0, 0))
+            }
+        }
         for (i in numberOfThreads - 1 downTo 0) {
             threadsComputationRanges[i] = ComputationRange(
                 nextComputationRangeEnd - computationRangeSize + 1,
                 nextComputationRangeEnd
             )
-            nextComputationRangeEnd = threadsComputationRanges[i]!!.start - 1
+            nextComputationRangeEnd = threadsComputationRanges[i].start - 1
         }
 
         // add potentially "remaining" values to first thread's range
-        threadsComputationRanges[0] = ComputationRange(1, threadsComputationRanges[0]!!.end)
+        threadsComputationRanges[0] = ComputationRange(1, threadsComputationRanges[0].end)
+        return threadsComputationRanges
     }
 
     @WorkerThread
-    private fun startComputation() {
-        for (i in 0 until numberOfThreads) {
-
-            Thread {
-                val rangeStart = threadsComputationRanges[i]!!.start
-                val rangeEnd = threadsComputationRanges[i]!!.end
-                var product = BigInteger("1")
-                for (num in rangeStart..rangeEnd) {
-                    if (isTimedOut()) {
-                        break
-                    }
-                    product = product.multiply(BigInteger(num.toString()))
-                }
-                threadsComputationResults[i] = product
-
-                reentrantLock.withLock {
-                    numOfFinishedThreads++
-                    lockCondition.signalAll()
-                }
-
-            }.start()
+    private suspend fun startComputation(ranges: List<ComputationRange>): List<BigInteger> {
+        return ranges.map {
+            CoroutineScope(Dispatchers.IO).computeProductForRangeAsync(
+                it
+            )
         }
+            .map { it.await() }
     }
 
-    @WorkerThread
-    private fun waitForThreadsResultsOrTimeoutOrAbort() {
-        reentrantLock.withLock {
-            while (numOfFinishedThreads != numberOfThreads && !abortComputation && !isTimedOut()) {
-                try {
-                    lockCondition.await(remainingMillisToTimeout(), TimeUnit.MILLISECONDS)
-                } catch (e: InterruptedException) {
-                    return
-                }
-
+    private fun CoroutineScope.computeProductForRangeAsync(range: ComputationRange): Deferred<BigInteger> {
+        return async(Dispatchers.IO) {
+            var product = BigInteger("1")
+            for (num in range.start..range.end) {
+                product = product.multiply(BigInteger(num.toString()))
             }
+            product
         }
     }
 
     @WorkerThread
-    private fun processComputationResults(): Result {
-        if (abortComputation) {
-            return Result.Aborted
-        }
-
-        val result = computeFinalResult()
-
-        // need to check for timeout after computation of the final result
-        if (isTimedOut()) {
-            return Result.Timeout
-        }
-
+    private fun processComputationResults(partialResults: List<BigInteger>): Result {
+        val result = computeFinalResult(partialResults)
         return Result.Factorial(result)
     }
 
     @WorkerThread
-    private fun computeFinalResult(): BigInteger {
+    private fun computeFinalResult(partialResults: List<BigInteger>): BigInteger {
         var result = BigInteger("1")
-        for (i in 0 until numberOfThreads) {
-            if (isTimedOut()) {
-                break
-            }
-            result = result.multiply(threadsComputationResults[i])
+        for (i in partialResults.indices) {
+            result = result.multiply(partialResults[i])
         }
         return result
-    }
-
-    private fun remainingMillisToTimeout(): Long {
-        return computationTimeoutTime - System.currentTimeMillis()
-    }
-
-    private fun isTimedOut(): Boolean {
-        return System.currentTimeMillis() >= computationTimeoutTime
     }
 
     private data class ComputationRange(
         val start: Long,
         val end: Long
-    )
+    ) : Iterable<Long> {
+        override fun iterator(): Iterator<Long> {
+            return object : Iterator<Long> {
+                var currentValue = start
+                override fun hasNext(): Boolean {
+                    return currentValue <= end
+                }
+
+                override fun next(): Long {
+                    return currentValue++
+                }
+            }
+        }
+
+    }
 
     sealed class Result {
         object Timeout : Result() {
             override fun toString(): String {
                 return "Computation timed out"
-            }
-        }
-
-        object Aborted : Result() {
-            override fun toString(): String {
-                return "Computation was aborted"
             }
         }
 
