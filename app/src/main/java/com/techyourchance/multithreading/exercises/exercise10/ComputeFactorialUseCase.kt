@@ -1,23 +1,15 @@
 package com.techyourchance.multithreading.exercises.exercise10
 
-import android.os.Handler
-import android.os.Looper
-
-import com.techyourchance.multithreading.common.BaseObservable
-
-import java.math.BigInteger
-
 import androidx.annotation.WorkerThread
+import java.math.BigInteger
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class ComputeFactorialUseCase : BaseObservable<ComputeFactorialUseCase.Listener>() {
+class ComputeFactorialUseCase {
 
     private val reentrantLock = ReentrantLock()
     private val lockCondition = reentrantLock.newCondition()
-
-    private val uiHandler = Handler(Looper.getMainLooper())
 
     private var numberOfThreads: Int = 0
     private var threadsComputationRanges: Array<ComputationRange?> = arrayOf()
@@ -28,30 +20,22 @@ class ComputeFactorialUseCase : BaseObservable<ComputeFactorialUseCase.Listener>
 
     private var abortComputation: Boolean = false
 
-    interface Listener {
-        fun onFactorialComputed(result: BigInteger)
-        fun onFactorialComputationTimedOut()
-        fun onFactorialComputationAborted()
+    suspend fun computeFactorial(
+        argument: Int,
+        timeout: Int
+    ): Result {
+
+        initComputationParams(argument, timeout)
+        startComputation()
+        waitForThreadsResultsOrTimeoutOrAbort()
+        return processComputationResults()
+
     }
 
-    override fun onLastListenerUnregistered() {
-        super.onLastListenerUnregistered()
-        reentrantLock.withLock {
-            abortComputation = true
-            lockCondition.signalAll()
-        }
-    }
-
-    fun computeFactorialAndNotify(argument: Int, timeout: Int) {
-        Thread {
-            initComputationParams(argument, timeout)
-            startComputation()
-            waitForThreadsResultsOrTimeoutOrAbort()
-            processComputationResults()
-        }.start()
-    }
-
-    private fun initComputationParams(factorialArgument: Int, timeout: Int) {
+    private fun initComputationParams(
+        factorialArgument: Int,
+        timeout: Int
+    ) {
         numberOfThreads = if (factorialArgument < 20)
             1
         else
@@ -77,8 +61,8 @@ class ComputeFactorialUseCase : BaseObservable<ComputeFactorialUseCase.Listener>
         var nextComputationRangeEnd = factorialArgument.toLong()
         for (i in numberOfThreads - 1 downTo 0) {
             threadsComputationRanges[i] = ComputationRange(
-                    nextComputationRangeEnd - computationRangeSize + 1,
-                    nextComputationRangeEnd
+                nextComputationRangeEnd - computationRangeSize + 1,
+                nextComputationRangeEnd
             )
             nextComputationRangeEnd = threadsComputationRanges[i]!!.start - 1
         }
@@ -127,21 +111,19 @@ class ComputeFactorialUseCase : BaseObservable<ComputeFactorialUseCase.Listener>
     }
 
     @WorkerThread
-    private fun processComputationResults() {
+    private fun processComputationResults(): Result {
         if (abortComputation) {
-            notifyAborted()
-            return
+            return Result.Aborted
         }
 
         val result = computeFinalResult()
 
         // need to check for timeout after computation of the final result
         if (isTimedOut()) {
-            notifyTimeout()
-            return
+            return Result.Timeout
         }
 
-        notifySuccess(result)
+        return Result.Factorial(result)
     }
 
     @WorkerThread
@@ -164,30 +146,28 @@ class ComputeFactorialUseCase : BaseObservable<ComputeFactorialUseCase.Listener>
         return System.currentTimeMillis() >= computationTimeoutTime
     }
 
-    private fun notifySuccess(result: BigInteger) {
-        uiHandler.post {
-            for (listener in listeners) {
-                listener.onFactorialComputed(result)
+    private data class ComputationRange(
+        val start: Long,
+        val end: Long
+    )
+
+    sealed class Result {
+        object Timeout : Result() {
+            override fun toString(): String {
+                return "Computation timed out"
+            }
+        }
+
+        object Aborted : Result() {
+            override fun toString(): String {
+                return "Computation was aborted"
+            }
+        }
+
+        class Factorial(private val bigInteger: BigInteger) : Result() {
+            override fun toString(): String {
+                return bigInteger.toString()
             }
         }
     }
-
-    private fun notifyAborted() {
-        uiHandler.post {
-            for (listener in listeners) {
-                listener.onFactorialComputationAborted()
-            }
-        }
-    }
-
-    private fun notifyTimeout() {
-        uiHandler.post {
-            for (listener in listeners) {
-                listener.onFactorialComputationTimedOut()
-            }
-        }
-    }
-
-
-    private data class ComputationRange(val start: Long, val end: Long)
 }

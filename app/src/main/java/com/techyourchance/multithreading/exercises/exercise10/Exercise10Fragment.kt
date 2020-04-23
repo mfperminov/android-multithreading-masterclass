@@ -9,20 +9,22 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-
-import com.techyourchance.multithreading.R
-import com.techyourchance.multithreading.common.BaseFragment
-
-import java.math.BigInteger
 import androidx.fragment.app.Fragment
 import com.techyourchance.multithreading.DefaultConfiguration
+import com.techyourchance.multithreading.R
+import com.techyourchance.multithreading.common.BaseFragment
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
-class Exercise10Fragment : BaseFragment(), ComputeFactorialUseCase.Listener {
+class Exercise10Fragment : BaseFragment() {
 
     private lateinit var edtArgument: EditText
     private lateinit var edtTimeout: EditText
     private lateinit var btnStartWork: Button
     private lateinit var txtResult: TextView
+    private var job: Job? = null
 
     private lateinit var computeFactorialUseCase: ComputeFactorialUseCase
 
@@ -55,40 +57,23 @@ class Exercise10Fragment : BaseFragment(), ComputeFactorialUseCase.Listener {
 
             val argument = Integer.valueOf(edtArgument.text.toString())
 
-            computeFactorialUseCase.computeFactorialAndNotify(argument, getTimeout())
+            job = CoroutineScope(Dispatchers.Main).launch {
+                val result = computeFactorialUseCase.computeFactorial(argument, getTimeout())
+                txtResult.text = result.toString()
+                btnStartWork.isEnabled = true
+            }
         }
 
         return view
     }
 
-    override fun onStart() {
-        super.onStart()
-        computeFactorialUseCase.registerListener(this)
-    }
-
     override fun onStop() {
         super.onStop()
-        computeFactorialUseCase.unregisterListener(this)
-
+        job?.cancel()
     }
 
     override fun getScreenTitle(): String {
         return "Exercise 10"
-    }
-
-    override fun onFactorialComputed(result: BigInteger) {
-        txtResult.text = result.toString()
-        btnStartWork.isEnabled = true
-    }
-
-    override fun onFactorialComputationTimedOut() {
-        txtResult.text = "Computation timed out"
-        btnStartWork.isEnabled = true
-    }
-
-    override fun onFactorialComputationAborted() {
-        txtResult.text = "Computation aborted"
-        btnStartWork.isEnabled = true
     }
 
     private fun getTimeout() : Int {
