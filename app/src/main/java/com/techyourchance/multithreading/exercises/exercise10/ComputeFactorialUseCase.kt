@@ -11,7 +11,6 @@ import kotlinx.coroutines.withTimeout
 import java.math.BigInteger
 
 class ComputeFactorialUseCase {
-    private var computationTimeoutTime: Long = 0
 
     suspend fun computeFactorial(
         argument: Int,
@@ -21,7 +20,7 @@ class ComputeFactorialUseCase {
             try {
                 withTimeout(timeMillis = timeout.toLong()) {
                     val ranges = getComputationRanges(argument)
-                    val partialResults = startComputation(ranges)
+                    val partialResults = getPartialResults(ranges)
                     processComputationResults(partialResults)
                 }
             } catch (e: TimeoutCancellationException) {
@@ -59,13 +58,13 @@ class ComputeFactorialUseCase {
     }
 
     @WorkerThread
-    private suspend fun startComputation(ranges: List<ComputationRange>): List<BigInteger> {
-        return ranges.map {
+    private suspend fun getPartialResults(ranges: List<ComputationRange>): List<BigInteger> {
+        return ranges.map { range ->
             CoroutineScope(Dispatchers.IO).computeProductForRangeAsync(
-                it
+                range
             )
         }
-            .map { it.await() }
+            .map { deferred -> deferred.await() }
     }
 
     private fun CoroutineScope.computeProductForRangeAsync(range: ComputationRange): Deferred<BigInteger> {
@@ -96,21 +95,7 @@ class ComputeFactorialUseCase {
     private data class ComputationRange(
         val start: Long,
         val end: Long
-    ) : Iterable<Long> {
-        override fun iterator(): Iterator<Long> {
-            return object : Iterator<Long> {
-                var currentValue = start
-                override fun hasNext(): Boolean {
-                    return currentValue <= end
-                }
-
-                override fun next(): Long {
-                    return currentValue++
-                }
-            }
-        }
-
-    }
+    )
 
     sealed class Result {
         object Timeout : Result() {
